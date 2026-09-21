@@ -27,6 +27,12 @@ def _channel_creds(cid: int) -> tuple[str, str] | None:
         return decrypt(ch.access_token_enc), decrypt(ch.secret_enc)
 
 
+def _exists(cid: int, address: str) -> bool:
+    with session_scope() as s:
+        return s.scalars(select(Contact.id).where(Contact.line_channel_id == cid,
+                                                  Contact.address == address)).first() is not None
+
+
 def _upsert_pending(cid: int, ctype: str, address: str, name: str) -> tuple[Contact, bool]:
     with session_scope() as s:
         c = s.scalars(select(Contact).where(Contact.line_channel_id == cid,
@@ -69,7 +75,8 @@ async def line_webhook(cid: int, request: Request, x_line_signature: str = Heade
         is_bind = etype in ("follow", "join") or (
             etype == "message" and ev.get("message", {}).get("type") == "text"
             and ev["message"].get("text", "").strip().lower() in BIND_WORDS)
-        if not is_bind:
+        # 任何訊息都登記為待啟用（例如加好友時 webhook 尚未開啟、錯過 follow 事件）；仍需管理員啟用
+        if not is_bind and etype != "message":
             continue
         if src.get("type") == "group":
             ctype, address = "line_group", src.get("groupId")
@@ -77,10 +84,12 @@ async def line_webhook(cid: int, request: Request, x_line_signature: str = Heade
             ctype, address = "line_user", src.get("userId")
         else:
             continue  # 多人聊天室 (room) 不支援
+        if not is_bind and await asyncio.to_thread(_exists, cid, address):
+            continue  # 已登記過的一般訊息不處理（避免群組每則訊息都查 LINE API）
         name = await _display_name(token, src)
         contact, created = await asyncio.to_thread(_upsert_pending, cid, ctype, address, name)
         log.info("LINE 綁定 channel=%s %s %s created=%s", cid, ctype, address, created)
-        if ev.get("replyToken"):
+        if ev.get("replyToken") and (is_bind or created):  # 一般訊息只在首次登記時回覆
             if contact.status == "active":
                 msg = "✅ 此帳號已啟用監控通知。"
             else:
