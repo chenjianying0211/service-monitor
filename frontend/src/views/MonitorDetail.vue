@@ -8,7 +8,7 @@
           {{ m.name }}
           <el-tag :type="STATUS[st].tag" round>{{ STATUS[st].label }}</el-tag>
         </h2>
-        <div class="sub mono">{{ TYPE_LABEL[m.type] }} · {{ m.target }}<span v-if="m.backend_url"> → {{ m.backend_url }}</span></div>
+        <div class="sub mono">{{ TYPE_LABEL[m.type] }} · {{ m.type === 'push' ? '外部回報' : m.target }}<span v-if="m.backend_url"> → {{ m.backend_url }}</span></div>
       </div>
       <div class="tools">
         <el-button icon="Refresh" @click="checkNow" :loading="checking">立即檢查</el-button>
@@ -23,6 +23,12 @@
       <div class="card kpi"><div class="muted">可用率 24h</div><b class="uptime" :class="uptimeClass(m.uptime_24h)">{{ fmtPct(m.uptime_24h) }}</b></div>
       <div class="card kpi"><div class="muted">可用率 7 天</div><b class="uptime" :class="uptimeClass(m.uptime_7d)">{{ fmtPct(m.uptime_7d) }}</b></div>
       <div class="card kpi"><div class="muted">可用率 30 天</div><b class="uptime" :class="uptimeClass(m.uptime_30d)">{{ fmtPct(m.uptime_30d) }}</b></div>
+    </div>
+
+    <div v-if="m.type === 'push'" class="card" style="margin-bottom:14px">
+      <b>回報網址與設定範例</b>
+      <div class="muted" style="margin-top:4px">最後回報：{{ fmtTime(m.last_push_at) }}（{{ fromNow(m.last_push_at) }}）</div>
+      <PushGuide :token="m.target" can-regenerate @regenerate="regenerate" />
     </div>
 
     <div class="card" style="margin-bottom:14px">
@@ -57,8 +63,8 @@
         <div class="card">
           <b>設定</b>
           <el-descriptions :column="1" size="small" border style="margin-top:12px">
-            <el-descriptions-item label="檢查間隔">{{ fmtDuration(m.interval_sec) }}</el-descriptions-item>
-            <el-descriptions-item label="逾時">{{ m.timeout_sec }} 秒</el-descriptions-item>
+            <el-descriptions-item :label="m.type === 'push' ? '預期回報間隔' : '檢查間隔'">{{ fmtDuration(m.interval_sec) }}</el-descriptions-item>
+            <el-descriptions-item :label="m.type === 'push' ? '寬限' : '逾時'">{{ m.timeout_sec }} 秒</el-descriptions-item>
             <el-descriptions-item label="告警門檻">連續失敗 {{ m.retries }} 次</el-descriptions-item>
             <el-descriptions-item label="重複提醒">{{ m.resend_interval_min ? `每 ${m.resend_interval_min} 分鐘` : '不提醒' }}</el-descriptions-item>
             <el-descriptions-item v-if="['http','keyword','proxy_pair'].includes(m.type)" label="預期狀態碼">{{ m.expected_status }}</el-descriptions-item>
@@ -79,12 +85,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import http from '../api'
 import LatencyChart from '../components/LatencyChart.vue'
 import MonitorForm from '../components/MonitorForm.vue'
-import { STATUS, TYPE_LABEL, fmtDuration, fmtPct, fmtTime, uptimeClass } from '../utils'
+import PushGuide from '../components/PushGuide.vue'
+import { STATUS, TYPE_LABEL, fmtDuration, fmtPct, fmtTime, fromNow, uptimeClass } from '../utils'
 
 const route = useRoute()
 const id = route.params.id
@@ -112,6 +119,12 @@ async function loadAll() {
 async function checkNow() {
   checking.value = true
   try { await http.post(`/monitors/${id}/check`); await loadAll(); ElMessage.success('檢查完成') } finally { checking.value = false }
+}
+async function regenerate() {
+  await ElMessageBox.confirm('重新產生後舊的回報網址立即失效，對方主機的腳本必須改用新網址。確定？', '重新產生回報網址',
+    { type: 'warning', confirmButtonText: '重新產生', cancelButtonText: '取消' })
+  await http.post(`/monitors/${id}/push-token`)
+  ElMessage.success('已產生新的回報網址'); loadAll()
 }
 async function toggle() {
   const r = await http.post(`/monitors/${id}/toggle`)

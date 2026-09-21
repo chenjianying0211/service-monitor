@@ -51,9 +51,9 @@ class Monitor(Base):
     __tablename__ = "monitors"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(Unicode(128))
-    # http | keyword | tcp | ssl_cert | docker | proxy_pair
+    # http | keyword | tcp | ssl_cert | docker | proxy_pair | push
     type: Mapped[str] = mapped_column(Unicode(16))
-    target: Mapped[str] = mapped_column(Unicode(512))  # URL / host:port / 容器名 / 網域
+    target: Mapped[str] = mapped_column(Unicode(512))  # URL / host:port / 容器名 / 網域 / push token
     backend_url: Mapped[str | None] = mapped_column(Unicode(512), nullable=True)  # proxy_pair 後端
     method: Mapped[str] = mapped_column(Unicode(8), default="GET")
     expected_status: Mapped[str] = mapped_column(Unicode(32), default="200-399")
@@ -77,6 +77,7 @@ class Monitor(Base):
     last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_message: Mapped[str | None] = mapped_column(Unicode(1024), nullable=True)
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_push_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # push 類型最後回報時間
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

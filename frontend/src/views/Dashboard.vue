@@ -63,7 +63,7 @@
               <div class="mon-name ellipsis" :title="m.name">{{ m.name }}</div>
               <el-tag size="small" :type="STATUS[m.status].tag" effect="light" round>{{ STATUS[m.status].label }}</el-tag>
             </div>
-            <div class="mon-sub ellipsis muted" :title="m.target">{{ TYPE_LABEL[m.type] }} · {{ m.target }}
+            <div class="mon-sub ellipsis muted" :title="m.type === 'push' ? '' : m.target">{{ TYPE_LABEL[m.type] }} · {{ m.type === 'push' ? '外部回報' : m.target }}
               <template v-if="groupBy === 'host' && m.tags"> · {{ m.tags }}</template></div>
             <HeartbeatBar :beats="m.heartbeats" :slots="36" />
             <div class="mon-foot">

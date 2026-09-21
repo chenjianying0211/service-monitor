@@ -27,7 +27,13 @@
         </el-col>
       </el-row>
 
-      <el-form-item :label="targetLabel" prop="target">
+      <el-alert v-if="isPush" type="info" :closable="false" show-icon style="margin-bottom:16px"
+                title="其他主機自行監控，定時呼叫本平台的回報網址；逾時未回報或回報異常時，由這台依通知群組發送通知。"
+                :description="form.id ? '' : '儲存後會產生專屬回報網址，並附上 Linux / Windows 設定範例。'" />
+      <el-form-item v-if="isPush && form.id" label="回報網址與設定範例">
+        <PushGuide :token="form.target" can-regenerate @regenerate="regenerate" style="width:100%" />
+      </el-form-item>
+      <el-form-item v-if="!isPush" :label="targetLabel" prop="target">
         <el-input v-model="form.target" :placeholder="targetPlaceholder" />
         <div v-if="form.type === 'docker'" class="form-hint">Docker 容器監測只能看到監控平台所在主機（testlinux）上的容器；其他主機請用 TCP / HTTP 監測。</div>
       </el-form-item>
@@ -61,13 +67,13 @@
 
       <el-row :gutter="16">
         <el-col :sm="6" :xs="12">
-          <el-form-item label="檢查間隔（秒）"><el-input-number v-model="form.interval_sec" :min="20" :step="10" controls-position="right" /></el-form-item>
+          <el-form-item :label="isPush ? '預期回報間隔（秒）' : '檢查間隔（秒）'"><el-input-number v-model="form.interval_sec" :min="20" :step="10" controls-position="right" /></el-form-item>
         </el-col>
         <el-col :sm="6" :xs="12">
-          <el-form-item label="逾時（秒）"><el-input-number v-model="form.timeout_sec" :min="1" :max="120" controls-position="right" /></el-form-item>
+          <el-form-item :label="isPush ? '寬限秒數' : '逾時（秒）'"><el-input-number v-model="form.timeout_sec" :min="1" :max="120" controls-position="right" /></el-form-item>
         </el-col>
         <el-col :sm="6" :xs="12">
-          <el-form-item label="連續失敗幾次才告警"><el-input-number v-model="form.retries" :min="1" :max="20" controls-position="right" /></el-form-item>
+          <el-form-item :label="isPush ? '連續異常幾次才告警' : '連續失敗幾次才告警'"><el-input-number v-model="form.retries" :min="1" :max="20" controls-position="right" /></el-form-item>
         </el-col>
         <el-col :sm="6" :xs="12">
           <el-form-item label="重複提醒（分，0=不提醒）"><el-input-number v-model="form.resend_interval_min" :min="0" :step="30" controls-position="right" /></el-form-item>
@@ -104,9 +110,11 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api'
 import { TYPE_OPTIONS } from '../utils'
+import PushGuide from './PushGuide.vue'
 
 const props = defineProps({ modelValue: Boolean, monitor: Object })
 const emit = defineEmits(['update:modelValue', 'saved'])
@@ -132,6 +140,15 @@ watch(() => props.modelValue, async (open) => {
   if (!props.monitor && groups.value.length === 1) form.groups = [{ group_id: groups.value[0].id, events: ['down', 'up', 'reminder'] }]
 })
 
+const router = useRouter()
+const isPush = computed(() => form.type === 'push')
+// 切到外部回報時套用較合理的預設：寬限 60 秒、異常一次就告警
+watch(() => form.type, (t, old) => {
+  if (t === 'push' && old && !form.id) {
+    if (form.timeout_sec === 10) form.timeout_sec = 60
+    if (form.retries === 3) form.retries = 1
+  }
+})
 const isHttp = computed(() => ['http', 'keyword', 'proxy_pair'].includes(form.type))
 const targetLabel = computed(() => ({
   http: '網址', keyword: '網址', proxy_pair: '對外網域網址', tcp: '主機:連接埠', ssl_cert: '網域（可加 :port）', docker: '容器名稱',
@@ -144,7 +161,7 @@ const hostIp = computed(() => hosts.value.find((h) => h.id === form.host_id)?.ip
 
 const rules = {
   name: [{ required: true, message: '請輸入名稱' }],
-  target: [{ required: true, message: '請輸入目標' }],
+  target: [{ validator: (_, v, cb) => (form.type !== 'push' && !v ? cb(new Error('請輸入目標')) : cb()) }],
   backend_url: [{ validator: (_, v, cb) => (form.type === 'proxy_pair' && !v ? cb(new Error('請輸入後端網址')) : cb()) }],
   keyword: [{ validator: (_, v, cb) => (form.type === 'keyword' && !v ? cb(new Error('請輸入關鍵字')) : cb()) }],
 }
@@ -157,7 +174,17 @@ function toggleGroup(gid, on) {
 
 const payload = () => {
   const { id, ...rest } = form
+  if (rest.type === 'push' && !rest.target) rest.target = 'auto'  // 伺服器會產生密鑰
   return rest
+}
+
+async function regenerate() {
+  await ElMessageBox.confirm('重新產生後舊的回報網址立即失效，對方主機的腳本必須改用新網址。確定？', '重新產生回報網址',
+    { type: 'warning', confirmButtonText: '重新產生', cancelButtonText: '取消' })
+  const r = await http.post(`/monitors/${form.id}/push-token`)
+  form.target = r.push_url.split('/').pop()
+  ElMessage.success('已產生新的回報網址')
+  emit('saved')
 }
 
 async function runTest() {
@@ -170,11 +197,14 @@ async function save() {
   await formRef.value.validate()
   saving.value = true
   try {
+    let created = null
     if (form.id) await http.put(`/monitors/${form.id}`, payload())
-    else await http.post('/monitors', payload())
+    else created = await http.post('/monitors', payload())
     ElMessage.success('已儲存')
     emit('update:modelValue', false)
     emit('saved')
+    // 新建的外部回報：直接帶到詳情頁看回報網址與範例
+    if (created?.push_url) router.push(`/monitors/${created.id}`)
   } finally { saving.value = false }
 }
 </script>

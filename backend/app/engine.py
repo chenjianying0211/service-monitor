@@ -17,7 +17,7 @@ TZ = ZoneInfo(settings.tz)
 
 TYPE_LABEL = {
     "http": "HTTP", "keyword": "關鍵字", "tcp": "TCP 連接埠", "ssl_cert": "SSL 憑證",
-    "docker": "Docker 容器", "proxy_pair": "轉發服務",
+    "docker": "Docker 容器", "proxy_pair": "轉發服務", "push": "獨立服務",
 }
 
 
@@ -53,6 +53,7 @@ def _apply(monitor_id: int, r: CheckOutcome):
                           status_code=r.status_code, message=r.message))
         m.last_check_at, m.last_latency_ms, m.last_message = now, r.latency_ms, r.message
         head = f"{m.name}（{TYPE_LABEL.get(m.type, m.type)}）"
+        target = "外部回報" if m.type == "push" else m.target  # push 的 target 是密鑰，不可外流
         event = None
 
         if r.ok:
@@ -66,7 +67,7 @@ def _apply(monitor_id: int, r: CheckOutcome):
                     inc.resolved_at = now
                     dur = f"\n中斷時長：{fmt_duration(now - inc.started_at)}"
                 event = ("up", f"✅ 已恢復：{m.name}",
-                         f"✅【服務恢復】{head}\n目標：{m.target}{dur}\n狀態：{r.message}\n時間：{local_str(now)}")
+                         f"✅【服務恢復】{head}\n目標：{target}{dur}\n狀態：{r.message}\n時間：{local_str(now)}")
             m.status = "UP"
         else:
             m.fail_count += 1
@@ -75,7 +76,7 @@ def _apply(monitor_id: int, r: CheckOutcome):
                 s.add(Incident(monitor_id=m.id, started_at=now, cause=r.message))
                 m.last_notified_at = now
                 event = ("down", f"🔴 服務中斷：{m.name}",
-                         f"🔴【服務中斷】{head}\n目標：{m.target}\n原因：{r.message}\n"
+                         f"🔴【服務中斷】{head}\n目標：{target}\n原因：{r.message}\n"
                          f"連續失敗：{m.fail_count} 次\n時間：{local_str(now)}")
             elif m.status == "DOWN":
                 if m.resend_interval_min > 0 and (
@@ -86,7 +87,7 @@ def _apply(monitor_id: int, r: CheckOutcome):
                                                            Incident.resolved_at.is_(None))).first()
                     since = f"\n已中斷：{fmt_duration(now - inc.started_at)}" if inc else ""
                     event = ("reminder", f"🔁 仍然中斷：{m.name}",
-                             f"🔁【仍然中斷】{head}\n目標：{m.target}\n原因：{r.message}{since}\n"
+                             f"🔁【仍然中斷】{head}\n目標：{target}\n原因：{r.message}{since}\n"
                              f"時間：{local_str(now)}")
             else:
                 m.status = "PENDING"
@@ -97,6 +98,13 @@ def _apply(monitor_id: int, r: CheckOutcome):
         return event
 
 
+async def apply_and_notify(monitor_id: int, result: CheckOutcome) -> None:
+    """寫入一筆結果、推進狀態機，需要時發通知（排程檢查與外部回報共用）。"""
+    event = await asyncio.to_thread(_apply, monitor_id, result)
+    if event:
+        await dispatch(monitor_id, *event)
+
+
 async def execute(monitor_id: int) -> None:
     try:
         with session_scope() as s:
@@ -105,8 +113,8 @@ async def execute(monitor_id: int) -> None:
                 return
             s.expunge(m)
         result = await run_check(m)
-        event = await asyncio.to_thread(_apply, monitor_id, result)
-        if event:
-            await dispatch(monitor_id, *event)
+        if result is None:  # push 類型按時回報中，這輪不用記錄
+            return
+        await apply_and_notify(monitor_id, result)
     except Exception:
         log.exception("monitor=%s 執行失敗", monitor_id)

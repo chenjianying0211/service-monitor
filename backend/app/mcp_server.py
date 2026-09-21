@@ -26,7 +26,7 @@ from .db import SessionLocal
 from .engine import execute
 from .models import Host, Incident, Monitor, MonitorNotifyGroup, NotifyGroup
 
-MonitorType = Literal["http", "keyword", "tcp", "ssl_cert", "docker", "proxy_pair"]
+MonitorType = Literal["http", "keyword", "tcp", "ssl_cert", "docker", "proxy_pair", "push"]
 
 mcp = MCPServer(
     name="service-monitor",
@@ -35,7 +35,9 @@ mcp = MCPServer(
         "管理服務監控平台的主機與監測項目。監測類型："
         "http（網址狀態碼）、keyword（網頁需含關鍵字）、tcp（host:port 可連線）、"
         "ssl_cert（憑證到期天數）、docker（僅限平台所在主機 testlinux 的容器）、"
-        "proxy_pair（nginx 轉發：target=對外網址、backend_url=後端網址）。"
+        "proxy_pair（nginx 轉發：target=對外網址、backend_url=後端網址）、"
+        "push（獨立服務：其他主機自行監控後定時打回報網址；target 隨意填，建立後回傳 push_url；"
+        "interval_sec=預期回報間隔、timeout_sec=寬限秒數）。"
         "新增前請先用 list_hosts / list_notify_groups 取得正確名稱；"
         "不確定目標是否正確時可先用 test_target 試打。"
     ),
@@ -202,6 +204,8 @@ async def test_target(type: MonitorType, target: str, backend_url: str | None = 
         raise ToolError(_fmt_validation(e)) from None
     except HTTPException as e:
         raise ToolError(str(e.detail)) from None
+    if type == "push":
+        return {"ok": True, "message": "外部回報類型不需試打，建立後由對方主機呼叫 push_url 回報"}
     r = await run_check(Monitor(**body.model_dump(exclude={"groups"})))
     return {"ok": r.ok, "message": r.message, "latency_ms": r.latency_ms, "status_code": r.status_code}
 
@@ -227,7 +231,9 @@ async def create_monitor(
 ) -> dict:
     """新增監測項目並立即開始檢查。
 
-    target 格式：http/keyword/proxy_pair 為完整網址；tcp 為 host:port；ssl_cert 為網域；docker 為容器名稱。
+    target 格式：http/keyword/proxy_pair 為完整網址；tcp 為 host:port；ssl_cert 為網域；docker 為容器名稱；
+    push 由伺服器產生密鑰（target 填 "auto"），回傳的 push_url 給對方主機定時呼叫
+    （?status=up|down&msg=說明&ping=毫秒），建議 retries=1。
     host 為主機名稱（list_hosts）；notify_groups 為通知群組名稱清單（list_notify_groups）。
     retries = 連續失敗幾次才告警；resend_interval_min = 持續中斷時每幾分鐘重複提醒（0 不提醒）。
     """

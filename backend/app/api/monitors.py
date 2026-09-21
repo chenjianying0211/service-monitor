@@ -1,3 +1,4 @@
+import secrets
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,6 +7,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from ..checkers import run_check
+from ..config import settings
 from ..db import get_db
 from ..engine import execute
 from ..models import CheckResult, Host, Incident, Monitor, MonitorNotifyGroup, utcnow
@@ -15,7 +17,7 @@ from .common import iso, row_dict, uptime_map
 
 router = APIRouter(prefix="/api", tags=["monitors"], dependencies=[Depends(require_user)])
 
-MonitorType = Literal["http", "keyword", "tcp", "ssl_cert", "docker", "proxy_pair"]
+MonitorType = Literal["http", "keyword", "tcp", "ssl_cert", "docker", "proxy_pair", "push"]
 
 
 class GroupLink(BaseModel):
@@ -50,6 +52,14 @@ def _validate(body: MonitorIn):
         raise HTTPException(400, "轉發服務需要填寫後端網址")
     if body.type == "keyword" and not body.keyword:
         raise HTTPException(400, "關鍵字監測需要填寫關鍵字")
+
+
+def push_url(token: str) -> str:
+    return f"{settings.public_base_url.rstrip('/')}/api/push/{token}"
+
+
+def _new_push_token() -> str:
+    return secrets.token_urlsafe(18)
 
 
 def _groups_of(db: Session, mid: int) -> list[dict]:
@@ -159,12 +169,14 @@ def monitor_incidents(mid: int, db: Session = Depends(get_db)):
 def create_monitor(body: MonitorIn, db: Session = Depends(get_db)):
     _validate(body)
     m = Monitor(**body.model_dump(exclude={"groups"}))
+    if m.type == "push":  # 回報網址的密鑰由伺服器產生
+        m.target = _new_push_token()
     db.add(m)
     db.flush()
     _save_groups(db, m.id, body.groups)
     db.commit()
     sync_job(m.id, m.interval_sec, m.enabled, run_now=True)
-    return {"id": m.id}
+    return {"id": m.id, **({"push_url": push_url(m.target)} if m.type == "push" else {})}
 
 
 @router.put("/monitors/{mid}")
@@ -173,12 +185,26 @@ def update_monitor(mid: int, body: MonitorIn, db: Session = Depends(get_db)):
     m = db.get(Monitor, mid)
     if not m:
         raise HTTPException(404, "找不到監測項目")
+    was_push, token = m.type == "push", m.target
     for k, v in body.model_dump(exclude={"groups"}).items():
         setattr(m, k, v)
+    if m.type == "push":  # 沿用既有密鑰；從其他類型改成 push 時才產生新的
+        m.target = token if was_push else _new_push_token()
     _save_groups(db, mid, body.groups)
     db.commit()
     sync_job(mid, m.interval_sec, m.enabled, run_now=True)
     return {"ok": True}
+
+
+@router.post("/monitors/{mid}/push-token")
+def regenerate_push_token(mid: int, db: Session = Depends(get_db)):
+    """重新產生回報密鑰（舊網址立即失效）。"""
+    m = db.get(Monitor, mid)
+    if not m or m.type != "push":
+        raise HTTPException(404, "找不到外部回報類型的監測項目")
+    m.target = _new_push_token()
+    db.commit()
+    return {"push_url": push_url(m.target)}
 
 
 @router.post("/monitors/{mid}/toggle")
@@ -204,6 +230,9 @@ async def check_now(mid: int):
 async def test_monitor(body: MonitorIn):
     """不存檔，直接測一次（表單上的「測試」按鈕）。"""
     _validate(body)
+    if body.type == "push":
+        return {"ok": True, "message": "外部回報類型不需試打，儲存後由對方主機呼叫回報網址", "latency_ms": None,
+                "status_code": None}
     m = Monitor(**body.model_dump(exclude={"groups"}))
     r = await run_check(m)
     return {"ok": r.ok, "message": r.message, "latency_ms": r.latency_ms, "status_code": r.status_code}

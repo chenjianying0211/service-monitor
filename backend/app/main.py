@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import scheduler
-from .api import apikeys, auth, hosts, monitors, notify
+from .api import apikeys, auth, hosts, monitors, notify, push
 from .db import Base, engine
 from .mcp_server import mcp, mcp_asgi
 from .migrate import upgrade
@@ -39,6 +39,7 @@ app.include_router(hosts.router)
 app.include_router(apikeys.router)
 app.include_router(notify.router)
 app.include_router(webhook_router)
+app.include_router(push.router)
 
 
 # MCP 通道（Streamable HTTP）：https://<host>/mcp/

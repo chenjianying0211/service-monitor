@@ -51,7 +51,7 @@
         <el-table-column label="名稱" min-width="200">
           <template #default="{ row }">
             <router-link :to="`/monitors/${row.id}`"><b>{{ row.name }}</b></router-link>
-            <div class="muted ellipsis mono" :title="row.target">{{ row.target }}</div>
+            <div class="muted ellipsis mono" :title="row.type === 'push' ? '' : row.target">{{ row.type === 'push' ? '外部回報' : row.target }}</div>
           </template>
         </el-table-column>
         <el-table-column label="主機" width="130">

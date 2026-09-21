@@ -17,6 +17,7 @@
 - [環境變數](#環境變數)
 - [監測類型與告警邏輯](#監測類型與告警邏輯)
 - [主機與分類](#主機與分類)
+- [獨立服務（外部回報）](#獨立服務外部回報)
 - [通知設定（LINE / Email）](#通知設定line--email)
 - [MCP 通道](#mcp-通道)
 - [HTTP API](#http-api)
@@ -31,7 +32,7 @@
 
 | 分類 | 功能 |
 |---|---|
-| 監測 | HTTP 狀態碼、網頁關鍵字、nginx 轉發（網域 vs 後端）、TCP 連接埠、SSL 憑證到期、Docker 容器狀態與健康檢查 |
+| 監測 | HTTP 狀態碼、網頁關鍵字、nginx 轉發（網域 vs 後端）、TCP 連接埠、SSL 憑證到期、Docker 容器狀態與健康檢查、外部回報（其他主機自行監控，通知走本平台） |
 | 告警 | 連續失敗 N 次才告警、持續中斷定時重複提醒、恢復通知附中斷時長、維護時段靜音 |
 | 通知 | 多個 LINE 官方帳號（Messaging API）、多組 SMTP；聯絡人以「通知群組」對應監測項目，可個別選擇要收的事件 |
 | LINE 綁定 | 使用者加好友或在群組輸入「綁定」即自動登記為待啟用聯絡人，管理員一鍵啟用 |
@@ -163,6 +164,7 @@ docker compose up -d --build
 | TCP | `host:port` | 能否建立連線 |
 | SSL 憑證 | `domain` 或 `domain:port` | 剩餘天數低於門檻（預設 14 天）即視為異常 |
 | Docker 容器 | 容器名稱 | 狀態為 running，且有 healthcheck 時必須 healthy（僅限平台所在主機） |
+| 外部回報 | 由伺服器產生回報網址 | 對方回報 `down`，或超過「預期回報間隔 + 寬限秒數」未回報 |
 
 **狀態機**
 
@@ -184,13 +186,52 @@ UNKNOWN ─▶ UP ─(失敗)─▶ PENDING ─(連續失敗達「告警門檻�
 
 | 按鈕 | 判斷規則 |
 |---|---|
-| 轉發服務 / 網站 / SSL 憑證 / 容器 | 依監測類型 |
+| 獨立服務 / 轉發服務 / 網站 / SSL 憑證 / 容器 | 依監測類型 |
 | 資料庫 | TCP 連接埠 1433、1521、3306、5432、6379、9200、27017 |
 | SSH | TCP 連接埠 22 |
 | 遠端桌面 | TCP 連接埠 3389 |
 | 其他連接埠 | 其餘 TCP |
 
 按鈕顯示數量，分類內有異常項目時右上角出現紅點。
+
+## 獨立服務（外部回報）
+
+其他主機（例如 Windows 的 MSSQL 主機）可以**自己做監控**，只把結果回報給本平台，由本平台統一發 LINE / Email 通知。也能當作「心跳」：對方主機當機或排程停了，一段時間沒回報就會告警。
+
+1. 新增監測，類型選 **外部回報（獨立服務）**，設定「預期回報間隔」「寬限秒數」、所屬主機與通知群組。
+2. 儲存後會自動帶到詳情頁，取得專屬回報網址（含密鑰，請當密碼保管；可重新產生，舊網址立即失效）。
+3. 在對方主機設定排程定時呼叫：
+
+```
+GET/POST https://monitor.careloger.com/api/push/<密鑰>?status=up|down&msg=<說明>&ping=<毫秒>
+```
+
+| 參數 | 說明 |
+|---|---|
+| `status` | `up`（預設）或 `down` |
+| `msg` | 狀態說明，會出現在通知內容 |
+| `ping` | 回應時間（毫秒），用於圖表 |
+
+**Linux（cron）**
+```bash
+# 每分鐘回報還活著
+* * * * * curl -fsS -m 10 "https://monitor.careloger.com/api/push/<密鑰>" >/dev/null 2>&1
+```
+
+**Windows（PowerShell + 工作排程器）**
+```powershell
+$Url = "https://monitor.careloger.com/api/push/<密鑰>"
+$s = Get-Service -Name MSSQLSERVER
+if ($s.Status -eq "Running") { $q = "status=up" }
+else { $q = "status=down&msg=" + [uri]::EscapeDataString("MSSQLSERVER 狀態：$($s.Status)") }
+Invoke-RestMethod -Uri "$($Url)?$q" -TimeoutSec 10 | Out-Null
+```
+```bat
+schtasks /create /tn "ServiceMonitorPush" /sc minute /mo 1 /ru SYSTEM /f ^
+  /tr "powershell -NoProfile -ExecutionPolicy Bypass -File C:\scripts\push-monitor.ps1"
+```
+
+詳情頁有完整範例可直接複製。通知內容不會出現密鑰（目標顯示為「外部回報」）。
 
 ## 通知設定（LINE / Email）
 
@@ -251,7 +292,7 @@ claude mcp add --transport http service-monitor https://monitor.careloger.com/mc
 | `list_hosts` / `create_host` | 查詢 / 新增主機 |
 | `list_monitors` | 列出監測（可依主機、狀態過濾） |
 | `get_monitor` | 單一監測的設定、可用率、通知群組、最近事件 |
-| `create_monitor` / `update_monitor` | 新增 / 修改監測（主機與通知群組用名稱指定） |
+| `create_monitor` / `update_monitor` | 新增 / 修改監測（主機與通知群組用名稱指定；`push` 類型回傳 `push_url`） |
 | `set_monitor_enabled` | 暫停 / 恢復 |
 | `check_monitor_now` | 立即檢查 |
 | `delete_monitor` | 刪除（含歷史紀錄） |
@@ -268,7 +309,7 @@ MCP 工具與網頁共用同一套驗證、排程與通知邏輯；參數錯誤�
 |---|---|
 | 登入 | `POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/password` |
 | 總覽 | `GET /api/dashboard` |
-| 監測 | `GET/POST /api/monitors`、`GET/PUT/DELETE /api/monitors/{id}`、`POST /api/monitors/{id}/check`、`POST /api/monitors/{id}/toggle`、`POST /api/monitors/test`、`GET /api/monitors/{id}/results?hours=24`、`GET /api/monitors/{id}/incidents` |
+| 監測 | `GET/POST /api/monitors`、`GET/PUT/DELETE /api/monitors/{id}`、`POST /api/monitors/{id}/check`、`POST /api/monitors/{id}/toggle`、`POST /api/monitors/test`、`POST /api/monitors/{id}/push-token`、`GET /api/monitors/{id}/results?hours=24`、`GET /api/monitors/{id}/incidents` |
 | 主機 | `GET/POST /api/hosts`、`PUT/DELETE /api/hosts/{id}` |
 | 事件 | `GET /api/incidents?only_open=true`、`POST /api/incidents/{id}/ack` |
 | LINE | `GET/POST /api/line-channels`、`PUT/DELETE /api/line-channels/{id}`、`GET /api/line-channels/{id}/quota` |
@@ -279,7 +320,7 @@ MCP 工具與網頁共用同一套驗證、排程與通知邏輯；參數錯誤�
 | 維護時段 | `GET/POST /api/maintenance`、`DELETE /api/maintenance/{id}` |
 | 管理員 | `GET/POST /api/users`、`DELETE /api/users/{id}` |
 | API 金鑰 | `GET/POST /api/api-keys`、`DELETE /api/api-keys/{id}` |
-| 公開 | `GET /healthz`、`POST /webhook/line/{channel_id}`（LINE 簽章驗證） |
+| 公開 | `GET /healthz`、`POST /webhook/line/{channel_id}`（LINE 簽章驗證）、`GET/POST /api/push/{密鑰}`（外部回報） |
 
 ## 對外開放（nginx + SSL）
 
@@ -338,6 +379,7 @@ curl -s http://127.0.0.1:8090/healthz  # 健康檢查
 - API 金鑰只存 SHA-256 雜湊；MCP 啟用 DNS rebinding 防護，只接受設定的 Host。
 - LINE webhook 以 Channel secret 驗證 `X-Line-Signature`。
 - Docker socket 以唯讀方式掛載，僅用於查詢容器狀態。
+- 外部回報網址以隨機密鑰（144 bits）識別，可隨時重新產生；通知內容與列表不顯示密鑰。
 - `.env` 不納入版本控制。
 
 ## 已知限制

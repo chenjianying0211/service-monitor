@@ -157,7 +157,22 @@ async def check_proxy_pair(m) -> CheckOutcome:
                         front.latency_ms, front.status_code)
 
 
-async def run_check(m) -> CheckOutcome:
+def check_push(m) -> CheckOutcome | None:
+    """外部回報：只負責判斷「逾時未回報」。有按時回報時回傳 None（結果由回報端點寫入）。"""
+    last = m.last_push_at or m.created_at
+    if last is None:
+        return None
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    limit = m.interval_sec + m.timeout_sec
+    silent = (now - last).total_seconds()
+    if silent <= limit:
+        return None
+    if m.last_push_at is None:
+        return CheckOutcome(False, f"建立後 {int(silent)} 秒仍未收到任何回報（預期每 {m.interval_sec} 秒一次）")
+    return CheckOutcome(False, f"已 {int(silent)} 秒未收到回報（預期每 {m.interval_sec} 秒，寬限 {m.timeout_sec} 秒）")
+
+
+async def run_check(m) -> CheckOutcome | None:
     t = m.type
     if t == "http":
         return await check_http(m)
@@ -171,4 +186,6 @@ async def run_check(m) -> CheckOutcome:
         return await check_docker(m)
     if t == "proxy_pair":
         return await check_proxy_pair(m)
+    if t == "push":
+        return check_push(m)
     return CheckOutcome(False, f"未知監測類型 {t}")

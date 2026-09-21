@@ -12,6 +12,7 @@ export const TYPE_OPTIONS = [
   { value: 'tcp', label: 'TCP 連接埠', desc: '檢查 host:port 是否可連線（資料庫、SSH…）' },
   { value: 'ssl_cert', label: 'SSL 憑證到期', desc: '憑證剩餘天數低於門檻時告警' },
   { value: 'docker', label: 'Docker 容器', desc: '容器是否運行中、健康檢查是否正常' },
+  { value: 'push', label: '外部回報（獨立服務）', desc: '其他主機自行監控並定時回報，逾時或回報異常由本平台通知' },
 ]
 export const TYPE_LABEL = Object.fromEntries(TYPE_OPTIONS.map((o) => [o.value, o.label]))
 
@@ -49,6 +50,7 @@ export function uptimeClass(v) {
 // 用途分類：依監測類型與 TCP 連接埠判斷，給列表的快速篩選按鈕使用
 const DB_PORTS = new Set([1433, 1521, 3306, 5432, 6379, 27017, 9200])
 export const CATEGORIES = [
+  { key: 'push', label: '獨立服務', icon: 'Promotion' },
   { key: 'proxy', label: '轉發服務', icon: 'Switch' },
   { key: 'web', label: '網站', icon: 'Link' },
   { key: 'ssl', label: 'SSL 憑證', icon: 'Lock' },
@@ -59,6 +61,7 @@ export const CATEGORIES = [
   { key: 'tcp', label: '其他連接埠', icon: 'Connection' },
 ]
 export function categoryOf(m) {
+  if (m.type === 'push') return 'push'
   if (m.type === 'proxy_pair') return 'proxy'
   if (m.type === 'http' || m.type === 'keyword') return 'web'
   if (m.type === 'ssl_cert') return 'ssl'

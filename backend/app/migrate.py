@@ -18,3 +18,6 @@ def upgrade() -> None:
                 "CONSTRAINT fk_monitors_host_id FOREIGN KEY REFERENCES hosts(id) ON DELETE SET NULL"))
             conn.execute(text("CREATE INDEX ix_monitors_host_id ON monitors(host_id)"))
             log.info("已新增 monitors.host_id")
+        if "last_push_at" not in cols:
+            conn.execute(text("ALTER TABLE monitors ADD last_push_at DATETIME NULL"))
+            log.info("已新增 monitors.last_push_at")
