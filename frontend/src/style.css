@@ -1,0 +1,66 @@
+:root {
+  --sm-up: #16a34a;
+  --sm-down: #dc2626;
+  --sm-pending: #d97706;
+  --sm-paused: #94a3b8;
+  --sm-bg: #f4f6fa;
+  --sm-card: #ffffff;
+  --sm-border: #e5e7eb;
+  --sm-muted: #64748b;
+  --sm-side: #0f172a;
+  --sm-side-text: #cbd5e1;
+  --sm-accent: #2563eb;
+}
+html.dark {
+  --sm-up: #22c55e;
+  --sm-down: #f87171;
+  --sm-pending: #fbbf24;
+  --sm-paused: #64748b;
+  --sm-bg: #0b1120;
+  --sm-card: #111827;
+  --sm-border: #1f2937;
+  --sm-muted: #94a3b8;
+  --sm-side: #020617;
+  --sm-accent: #60a5fa;
+}
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  background: var(--sm-bg);
+  color: var(--el-text-color-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 14px;
+}
+a { color: var(--sm-accent); text-decoration: none; }
+
+.page { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.page-head h2 { margin: 0; font-size: 20px; font-weight: 650; }
+.page-head .sub { color: var(--sm-muted); font-size: 13px; margin-top: 4px; }
+
+.card { background: var(--sm-card); border: 1px solid var(--sm-border); border-radius: 12px; padding: 16px 18px; }
+.muted { color: var(--sm-muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot.pulse { box-shadow: 0 0 0 0 currentColor; animation: pulse 1.8s infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.uptime.good { color: var(--sm-up); }
+.uptime.warn { color: var(--sm-pending); }
+.uptime.bad { color: var(--sm-down); }
+
+.el-card { border-radius: 12px; }
+.el-table { --el-table-bg-color: var(--sm-card); --el-table-tr-bg-color: var(--sm-card); }
+.el-dialog { border-radius: 14px; }
+.form-hint { color: var(--sm-muted); font-size: 12px; line-height: 1.5; margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .page { padding: 14px 16px 32px; }
+}

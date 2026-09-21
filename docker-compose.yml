@@ -1,0 +1,18 @@
+services:
+  service-monitor:
+    build: .
+    image: service-monitor:latest
+    container_name: service_monitor
+    restart: unless-stopped
+    # 與 nginx_proxy 相同使用 host 網路：可直接檢查 127.0.0.1 上的後端與 MSSQL
+    network_mode: host
+    env_file: .env
+    environment:
+      HOST: 127.0.0.1
+      PORT: 8090
+    volumes:
+      # 用於「Docker 容器」類型監測（查詢容器狀態）
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
