@@ -10,12 +10,21 @@
           <el-option label="未指定主機" :value="0" />
           <el-option v-for="h in hosts" :key="h.id" :label="h.name" :value="h.id" />
         </el-select>
-        <el-select v-model="typeFilter" placeholder="全部類型" clearable style="width:170px">
-          <el-option v-for="t in TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
-        </el-select>
         <el-input v-model="q" placeholder="搜尋" prefix-icon="Search" clearable style="width:200px" />
         <el-button type="primary" icon="Plus" @click="edit(null)">新增監測</el-button>
       </div>
+    </div>
+
+    <div class="cats">
+      <button class="cat" :class="{ on: !cat }" @click="cat = ''">
+        全部 <span class="cnt">{{ scoped.length }}</span>
+      </button>
+      <button v-for="c in catList" :key="c.key" class="cat" :class="{ on: cat === c.key }"
+              @click="cat = cat === c.key ? '' : c.key">
+        <el-icon><component :is="c.icon" /></el-icon>{{ c.label }}
+        <span class="cnt">{{ c.n }}</span>
+        <span v-if="c.down" class="down-dot" :title="`${c.down} 個異常`"></span>
+      </button>
     </div>
 
     <div class="card" style="padding:0">
@@ -77,7 +86,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api'
 import MonitorForm from '../components/MonitorForm.vue'
-import { STATUS, TYPE_LABEL, TYPE_OPTIONS, fmtDuration, fromNow } from '../utils'
+import { CATEGORIES, STATUS, TYPE_LABEL, categoryOf, fmtDuration, fromNow } from '../utils'
 
 const list = ref([])
 const groups = ref([])
@@ -85,7 +94,7 @@ const hosts = ref([])
 const hostFilter = ref('')
 const loading = ref(false)
 const q = ref('')
-const typeFilter = ref('')
+const cat = ref('')
 const formOpen = ref(false)
 const current = ref(null)
 const checking = ref(null)
@@ -100,12 +109,17 @@ const st = (r) => (r.enabled ? r.status : 'PAUSED')
 const tagsOf = (r) => (r.tags || '').split(',').map((s) => s.trim()).filter(Boolean)
 const hostName = (id) => hosts.value.find((h) => h.id === id)?.name || `#${id}`
 const groupName = (id) => groups.value.find((g) => g.id === id)?.name || `#${id}`
-const filtered = computed(() => {
+// 先套用主機與搜尋，分類按鈕上的數字才會跟著變
+const scoped = computed(() => {
   const kw = q.value.trim().toLowerCase()
-  return list.value.filter((m) => (!typeFilter.value || m.type === typeFilter.value)
-    && (hostFilter.value == null || hostFilter.value === '' || (m.host_id || 0) === hostFilter.value)
+  return list.value.filter((m) => (hostFilter.value == null || hostFilter.value === '' || (m.host_id || 0) === hostFilter.value)
     && (!kw || [m.name, m.target, m.tags].some((s) => (s || '').toLowerCase().includes(kw))))
 })
+const catList = computed(() => CATEGORIES.map((c) => {
+  const items = scoped.value.filter((m) => categoryOf(m) === c.key)
+  return { ...c, n: items.length, down: items.filter((m) => m.enabled && ['DOWN', 'PENDING'].includes(m.status)).length }
+}).filter((c) => c.n || cat.value === c.key))
+const filtered = computed(() => scoped.value.filter((m) => !cat.value || categoryOf(m) === cat.value))
 
 function edit(row) { current.value = row; formOpen.value = true }
 async function checkNow(row) {
@@ -127,5 +141,16 @@ async function remove(row) {
 
 <style scoped>
 .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.cats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.cat {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--sm-border); background: var(--sm-card); color: var(--el-text-color-primary);
+  font: inherit; cursor: pointer; transition: all .15s; position: relative;
+}
+.cat:hover { border-color: var(--sm-accent); color: var(--sm-accent); }
+.cat.on { background: var(--sm-accent); border-color: var(--sm-accent); color: #fff; }
+.cnt { font-size: 12px; padding: 0 7px; border-radius: 999px; background: var(--sm-border); color: var(--sm-muted); font-variant-numeric: tabular-nums; }
+.cat.on .cnt { background: rgba(255,255,255,.25); color: #fff; }
+.down-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sm-down); position: absolute; top: 2px; right: 2px; }
 .warn-text { color: var(--sm-pending); font-size: 12.5px; }
 </style>

@@ -45,3 +45,27 @@ export function uptimeClass(v) {
   if (v >= 95) return 'warn'
   return 'bad'
 }
+
+// 用途分類：依監測類型與 TCP 連接埠判斷，給列表的快速篩選按鈕使用
+const DB_PORTS = new Set([1433, 1521, 3306, 5432, 6379, 27017, 9200])
+export const CATEGORIES = [
+  { key: 'proxy', label: '轉發服務', icon: 'Switch' },
+  { key: 'web', label: '網站', icon: 'Link' },
+  { key: 'ssl', label: 'SSL 憑證', icon: 'Lock' },
+  { key: 'docker', label: '容器', icon: 'Box' },
+  { key: 'db', label: '資料庫', icon: 'Coin' },
+  { key: 'ssh', label: 'SSH', icon: 'Monitor' },
+  { key: 'rdp', label: '遠端桌面', icon: 'Platform' },
+  { key: 'tcp', label: '其他連接埠', icon: 'Connection' },
+]
+export function categoryOf(m) {
+  if (m.type === 'proxy_pair') return 'proxy'
+  if (m.type === 'http' || m.type === 'keyword') return 'web'
+  if (m.type === 'ssl_cert') return 'ssl'
+  if (m.type === 'docker') return 'docker'
+  const port = Number(String(m.target || '').split(':').pop())
+  if (DB_PORTS.has(port)) return 'db'
+  if (port === 22) return 'ssh'
+  if (port === 3389) return 'rdp'
+  return 'tcp'
+}
