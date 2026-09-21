@@ -1,5 +1,5 @@
 <template>
-  <router-view v-if="route.meta.public" />
+  <router-view v-if="route.meta.bare || (route.meta.public && !auth.token.value)" />
   <div v-else class="layout" :class="{ collapsed }">
     <aside class="side">
       <div class="brand">
@@ -80,7 +80,7 @@ applyDark()
 const openIncidents = ref(0)
 let timer
 async function poll() {
-  if (!auth.token.value || route.meta.public) return
+  if (!auth.token.value || route.meta.bare) return
   try {
     const list = await http.get('/incidents', { params: { only_open: true, limit: 100 }, silent: true })
     openIncidents.value = list.length

@@ -333,12 +333,10 @@ async def mcp_asgi(scope, receive, send):
     await _inner_app(scope, receive, send)
 
 
-# ---------------- 說明頁用：工具清單（需登入） ----------------
-from fastapi import APIRouter, Depends  # noqa: E402
+# ---------------- 公開說明頁用：工具清單（免登入，只含工具說明，不含任何密鑰） ----------------
+from fastapi import APIRouter  # noqa: E402
 
-from .security import require_user  # noqa: E402
-
-info_router = APIRouter(prefix="/api", tags=["mcp"], dependencies=[Depends(require_user)])
+info_router = APIRouter(prefix="/api", tags=["mcp"])
 
 
 def _param_type(p: dict) -> str:

@@ -264,7 +264,7 @@ schtasks /create /tn "ServiceMonitorPush" /sc minute /mo 1 /ru SYSTEM /f ^
 - 端點：`https://monitor.careloger.com/mcp/`（Streamable HTTP，stateless）
 - 驗證：`Authorization: Bearer smk_...`（或 `X-API-Key: smk_...`）
 - 金鑰：「系統設定 → MCP 通道 / API 金鑰」產生；只存 SHA-256 雜湊，產生時顯示一次，可隨時撤銷並查看最後使用時間。
-- 使用說明頁：登入後的 **MCP 說明**（`/mcp-guide`），含各 client 設定、範例對話、即時工具清單（`GET /api/mcp-info`），可直接把連結給使用者。
+- 使用說明頁：**公開、免登入** 的 https://monitor.careloger.com/mcp-guide ，含各 client 設定、範例對話、即時工具清單（`GET /api/mcp-info`），可直接把連結給使用者；使用時仍需向管理員索取金鑰。
 
 **Claude Code**
 ```bash
@@ -318,11 +318,11 @@ MCP 工具與網頁共用同一套驗證、排程與通知邏輯；參數錯誤�
 | 通知群組 | `GET/POST /api/groups`、`PUT/DELETE /api/groups/{id}` |
 | SMTP | `GET/POST /api/smtp`、`PUT/DELETE /api/smtp/{id}`、`POST /api/smtp/{id}/test` |
 | 紀錄 | `GET /api/notification-logs` |
-| MCP | `GET /api/mcp-info`（工具清單，供說明頁使用） |
+| MCP | `GET /api/mcp-info`（公開；工具清單，供說明頁使用） |
 | 維護時段 | `GET/POST /api/maintenance`、`DELETE /api/maintenance/{id}` |
 | 管理員 | `GET/POST /api/users`、`DELETE /api/users/{id}` |
 | API 金鑰 | `GET/POST /api/api-keys`、`DELETE /api/api-keys/{id}` |
-| 公開 | `GET /healthz`、`POST /webhook/line/{channel_id}`（LINE 簽章驗證）、`GET/POST /api/push/{密鑰}`（外部回報） |
+| 公開 | `GET /healthz`、`GET /api/mcp-info`、`POST /webhook/line/{channel_id}`（LINE 簽章驗證）、`GET/POST /api/push/{密鑰}`（外部回報） |
 
 ## 對外開放（nginx + SSL）
 

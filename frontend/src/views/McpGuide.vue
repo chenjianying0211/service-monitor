@@ -1,11 +1,18 @@
 <template>
+  <header v-if="guest" class="guest-bar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26"><circle cx="16" cy="16" r="14" fill="#22c55e" /><path d="M6 17h5l3-7 4 13 3-6h5" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      服務監控平台
+    </div>
+    <el-button size="small" @click="$router.push('/login?next=/mcp-guide')">管理員登入</el-button>
+  </header>
   <div class="page">
     <div class="page-head">
       <div>
         <h2>MCP 使用說明</h2>
         <div class="sub">讓 AI（Claude Code、Claude Desktop、VS Code、Cursor 等）用一般對話查詢與管理監控</div>
       </div>
-      <el-button type="primary" icon="Key" @click="$router.push('/settings')">產生 / 管理金鑰</el-button>
+      <el-button v-if="!guest" type="primary" icon="Key" @click="$router.push('/settings')">產生 / 管理金鑰</el-button>
     </div>
 
     <div class="card hero">
@@ -28,7 +35,8 @@
     <h3>① 取得 API 金鑰</h3>
     <div class="card">
       <ol class="steps">
-        <li>由平台管理員到 <router-link to="/settings">系統設定 → MCP 通道 / API 金鑰</router-link> 按「產生金鑰」，名稱建議寫「使用者 - 裝置」，例如「小王 - 筆電」。</li>
+        <li v-if="guest"><b>請向平台管理員索取 API 金鑰</b>（管理員在「系統設定 → MCP 通道 / API 金鑰」產生）。</li>
+        <li v-else>到 <router-link to="/settings">系統設定 → MCP 通道 / API 金鑰</router-link> 按「產生金鑰」，名稱建議寫「使用者 - 裝置」，例如「小王 - 筆電」。</li>
         <li>金鑰（<code>smk_</code> 開頭）<b>只會顯示一次</b>，請立即交給使用者並妥善保存，視同密碼。</li>
         <li>一人一把：之後可在同一頁看到各金鑰最後使用時間，離職或遺失時單獨撤銷即可。</li>
       </ol>
@@ -102,7 +110,7 @@
       <ul class="notes">
         <li><b>刪除會直接生效</b>：<code>delete_monitor</code> 會連同歷史紀錄刪除，多數 AI 工具在執行前會詢問確認，請看清楚再允許。</li>
         <li><b>主機與通知群組用名稱指定</b>：AI 會先用 <code>list_hosts</code>、<code>list_notify_groups</code> 查正確名稱；名稱打錯會收到現有清單。</li>
-        <li><b>Docker 容器</b>只能監測平台所在主機（testlinux）；其他主機請用 TCP / HTTP，或「外部回報」。</li>
+        <li><b>Docker 容器</b>只能監測平台所在主機；其他主機請用 TCP / HTTP，或「外部回報」。</li>
         <li><b>外部回報（push）</b>建立後會回傳 <code>push_url</code>，把它設定到對方主機的排程即可。</li>
         <li>AI 做的變更與網頁操作完全相同，會立刻出現在總覽與監測列表。</li>
       </ul>
@@ -113,7 +121,7 @@
 <script setup>
 import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { ElButton, ElMessage } from 'element-plus'
-import http from '../api'
+import http, { auth } from '../api'
 
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); ElMessage.success('已複製') } catch { ElMessage.info('請手動選取複製') }
@@ -134,6 +142,7 @@ const KIND = {
   destructive: { label: '刪除', tag: 'danger' },
 }
 
+const guest = computed(() => !auth.token.value)
 const client = ref('cc')
 const tools = ref([])
 const loading = ref(false)
@@ -171,15 +180,15 @@ const remoteJson = computed(() => JSON.stringify({ mcpServers: { 'service-monito
 const examples = [
   { title: '查詢狀態', icon: 'View', items: [
     '現在監控平台有沒有服務中斷？',
-    '列出 testlinux 上所有監測項目和狀態',
+    '列出某台主機上所有監測項目和狀態',
     'inspect.careloger.com 最近 30 天的可用率和中斷紀錄？',
     '目前有哪些進行中的中斷事件？',
   ] },
   { title: '新增監測', icon: 'Plus', items: [
-    '幫 mssql 主機（13.78.194.229）加一個 1433 的 TCP 監測，通知 IT 值班',
+    '幫 mssql 主機加一個 1433 的 TCP 監測，通知 IT 值班',
     '監測 https://example.com，頁面要包含「登入」兩個字，每 5 分鐘檢查一次',
     '幫 windowstest 建一個外部回報監測，每 5 分鐘回報一次，給我回報網址和 PowerShell 範例',
-    '新增主機 ahfuserver2，IP 20.1.2.3，Linux，Korea Central',
+    '新增一台主機 web02，IP 10.0.0.12，Linux，Korea Central',
   ] },
   { title: '調整與管理', icon: 'Setting', items: [
     '把所有 SSL 憑證監測的警戒天數改成 21 天',
@@ -192,6 +201,12 @@ const examples = [
 
 <style scoped>
 h3 { font-size: 16px; margin: 22px 0 10px; }
+.guest-bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; height: 56px; padding: 0 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--sm-side); color: #fff; font-weight: 700;
+}
+.guest-bar .brand { display: flex; align-items: center; gap: 10px; }
 .small { font-size: 12.5px; font-weight: 400; }
 .hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
 .hero p { margin: 8px 0 0; line-height: 1.7; }
