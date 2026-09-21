@@ -212,11 +212,15 @@ def list_contacts(db: Session = Depends(get_db)):
 
 
 def _check_contact(body: ContactIn):
+    # 依類型清掉不相干的欄位：Email 聯絡人若掛著 line_channel_id，刪除該 LINE 官方帳號時會被連帶刪除
     if body.type == "email":
+        body.line_channel_id = None
         if "@" not in body.address:
             raise HTTPException(400, "Email 格式錯誤")
-    elif not body.line_channel_id:
-        raise HTTPException(400, "LINE 聯絡人需指定官方帳號")
+    else:
+        body.smtp_profile_id = None
+        if not body.line_channel_id:
+            raise HTTPException(400, "LINE 聯絡人需指定官方帳號")
 
 
 def _save_contact_groups(db: Session, cid: int, group_ids: list[int]):

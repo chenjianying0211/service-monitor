@@ -21,3 +21,8 @@ def upgrade() -> None:
         if "last_push_at" not in cols:
             conn.execute(text("ALTER TABLE monitors ADD last_push_at DATETIME NULL"))
             log.info("已新增 monitors.last_push_at")
+        # 修正舊資料：Email 聯絡人不應綁 LINE 官方帳號（否則刪 LINE 帳號時會被連帶刪除）
+        n = conn.execute(text(
+            "UPDATE contacts SET line_channel_id = NULL WHERE type = 'email' AND line_channel_id IS NOT NULL")).rowcount
+        if n:
+            log.info("已修正 %d 筆 Email 聯絡人的 line_channel_id", n)

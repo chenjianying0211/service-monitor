@@ -76,6 +76,8 @@ service-monitor/
 ├── Dockerfile                 # node 建置前端 → python:3.12-slim 執行
 ├── docker-compose.yml
 ├── .env.example
+├── scripts/
+│   └── disk-push.sh           # 磁碟使用率檢查 → 外部回報
 ├── backend/
 │   ├── requirements.txt
 │   └── app/
@@ -232,6 +234,17 @@ schtasks /create /tn "ServiceMonitorPush" /sc minute /mo 1 /ru SYSTEM /f ^
 ```
 
 詳情頁有完整範例可直接複製。通知內容不會出現密鑰（目標顯示為「外部回報」）。
+
+### 範例：磁碟空間告警（`scripts/disk-push.sh`）
+
+任一掛載點使用率達門檻即回報異常，通知內容包含使用率與剩餘空間。本機已設定每 5 分鐘檢查 `/`，門檻 90%：
+
+```bash
+# 用法：disk-push.sh <回報網址> [門檻%，預設 90] [掛載點...，預設 /]
+*/5 * * * * /home/azsureuser/claude-projects/service-monitor/scripts/disk-push.sh "https://monitor.careloger.com/api/push/<密鑰>" 90 / >/dev/null 2>&1
+```
+
+監測項目建議：預期回報間隔 300 秒、寬限 120 秒、異常 1 次即告警、每 6 小時重複提醒。其他 Linux 主機只要複製這支腳本並建立自己的外部回報監測即可。
 
 ## 通知設定（LINE / Email）
 
