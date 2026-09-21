@@ -39,7 +39,9 @@
     </el-row>
 
     <div class="card" style="margin-top:0">
-      <div class="bar"><b>MCP 通道 / API 金鑰</b><el-button size="small" type="primary" icon="Plus" @click="newKey">產生金鑰</el-button></div>
+      <div class="bar"><b>MCP 通道 / API 金鑰</b>
+        <div><el-button size="small" icon="Reading" @click="$router.push('/mcp-guide')">使用說明</el-button>
+          <el-button size="small" type="primary" icon="Plus" @click="newKey">產生金鑰</el-button></div></div>
       <div class="muted" style="margin-bottom:10px">
         讓 AI（Claude Code、Claude Desktop 等 MCP client）查詢與新增監測。MCP 網址：
         <code class="mono">{{ mcpUrl }}</code>，以 <code>Authorization: Bearer &lt;金鑰&gt;</code> 驗證。金鑰只在產生時顯示一次。
@@ -63,6 +65,7 @@
       <div class="copy-row"><el-input :model-value="cliCmd" readonly type="textarea" :rows="3" class="mono" /><el-button icon="CopyDocument" @click="copy(cliCmd)" /></div>
       <div class="gc-sec">JSON 設定（Claude Desktop / 其他 client）</div>
       <div class="copy-row"><el-input :model-value="jsonCfg" readonly type="textarea" :rows="9" class="mono" /><el-button icon="CopyDocument" @click="copy(jsonCfg)" /></div>
+      <div class="gc-sec">給使用者的說明頁（登入後可看）：<a :href="`${origin}/mcp-guide`" target="_blank">{{ origin }}/mcp-guide</a></div>
       <template #footer><el-button type="primary" @click="keyDlg = false">我已保存</el-button></template>
     </el-dialog>
 
@@ -120,6 +123,7 @@ async function delUser(u) {
   await ElMessageBox.confirm(`確定刪除管理員「${u.username}」？`, '刪除', { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消' })
   await http.delete(`/users/${u.id}`); load()
 }
+const origin = location.origin
 const mcpUrl = `${location.origin}/mcp/`
 const keyDlg = ref(false)
 const created = reactive({ key: '', mcp_url: '' })

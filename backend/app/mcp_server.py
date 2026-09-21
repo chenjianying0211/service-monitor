@@ -331,3 +331,38 @@ async def mcp_asgi(scope, receive, send):
                         "body": '{"error":"invalid or missing API key"}'.encode()})
             return
     await _inner_app(scope, receive, send)
+
+
+# ---------------- 說明頁用：工具清單（需登入） ----------------
+from fastapi import APIRouter, Depends  # noqa: E402
+
+from .security import require_user  # noqa: E402
+
+info_router = APIRouter(prefix="/api", tags=["mcp"], dependencies=[Depends(require_user)])
+
+
+def _param_type(p: dict) -> str:
+    if "enum" in p:
+        return " | ".join(map(str, p["enum"]))
+    if "anyOf" in p:
+        return " | ".join(_param_type(x) for x in p["anyOf"] if x.get("type") != "null") or "any"
+    t = p.get("type", "any")
+    return f"{p.get('items', {}).get('type', 'any')}[]" if t == "array" else t
+
+
+@info_router.get("/mcp-info")
+async def mcp_info():
+    tools = []
+    for t in await mcp.list_tools():
+        schema = t.input_schema or {}
+        required = set(schema.get("required", []))
+        ann = t.annotations
+        kind = "read" if ann and ann.read_only_hint else ("destructive" if ann and ann.destructive_hint else "write")
+        tools.append({
+            "name": t.name,
+            "description": (t.description or "").strip(),
+            "kind": kind,
+            "params": [{"name": k, "type": _param_type(v), "required": k in required,
+                        "default": v.get("default")} for k, v in schema.get("properties", {}).items()],
+        })
+    return {"url": f"{settings.public_base_url.rstrip('/')}/mcp/", "server": mcp.name, "tools": tools}

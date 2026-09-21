@@ -59,6 +59,7 @@ const nav = [
   { to: '/incidents', label: '中斷事件', icon: 'WarningFilled' },
   { to: '/notifications', label: '通知設定', icon: 'Bell' },
   { to: '/logs', label: '通知紀錄', icon: 'Document' },
+  { to: '/mcp-guide', label: 'MCP 說明', icon: 'Connection' },
   { to: '/settings', label: '系統設定', icon: 'Setting' },
 ]
 const isActive = (to) => (to === '/' ? route.path === '/' : route.path.startsWith(to))

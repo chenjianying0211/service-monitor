@@ -10,6 +10,7 @@ const routes = [
   { path: '/incidents', component: () => import('./views/Incidents.vue'), meta: { title: '中斷事件' } },
   { path: '/notifications', component: () => import('./views/Notifications.vue'), meta: { title: '通知設定' } },
   { path: '/logs', component: () => import('./views/Logs.vue'), meta: { title: '通知紀錄' } },
+  { path: '/mcp-guide', component: () => import('./views/McpGuide.vue'), meta: { title: 'MCP 使用說明' } },
   { path: '/settings', component: () => import('./views/Settings.vue'), meta: { title: '系統設定' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
