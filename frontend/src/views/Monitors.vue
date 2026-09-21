@@ -6,16 +6,29 @@
         <div class="sub">共 {{ list.length }} 個 · 點名稱看詳細圖表與事件</div>
       </div>
       <div class="tools">
-        <el-select v-model="hostFilter" placeholder="全部主機" clearable style="width:160px">
-          <el-option label="未指定主機" :value="0" />
-          <el-option v-for="h in hosts" :key="h.id" :label="h.name" :value="h.id" />
-        </el-select>
         <el-input v-model="q" placeholder="搜尋" prefix-icon="Search" clearable style="width:200px" />
         <el-button type="primary" icon="Plus" @click="edit(null)">新增監測</el-button>
       </div>
     </div>
 
-    <div class="cats">
+    <div class="filter-row">
+      <span class="row-label">主機</span>
+      <div class="cats">
+        <button class="cat" :class="{ on: hostFilter === null }" @click="hostFilter = null">
+          全部 <span class="cnt">{{ byCat.length }}</span>
+        </button>
+        <button v-for="h in hostList" :key="h.id" class="cat" :class="{ on: hostFilter === h.id, empty: !h.n }"
+                @click="hostFilter = hostFilter === h.id ? null : h.id">
+          <span class="os">{{ h.icon }}</span>{{ h.name }}
+          <span class="cnt">{{ h.n }}</span>
+          <span v-if="h.down" class="down-dot" :title="`${h.down} 個異常`"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <span class="row-label">分類</span>
+      <div class="cats">
       <button class="cat" :class="{ on: !cat }" @click="cat = ''">
         全部 <span class="cnt">{{ scoped.length }}</span>
       </button>
@@ -25,6 +38,7 @@
         <span class="cnt">{{ c.n }}</span>
         <span v-if="c.down" class="down-dot" :title="`${c.down} 個異常`"></span>
       </button>
+      </div>
     </div>
 
     <div class="card" style="padding:0">
@@ -91,7 +105,7 @@ import { CATEGORIES, STATUS, TYPE_LABEL, categoryOf, fmtDuration, fromNow } from
 const list = ref([])
 const groups = ref([])
 const hosts = ref([])
-const hostFilter = ref('')
+const hostFilter = ref(null)  // null = 全部，0 = 未指定主機
 const loading = ref(false)
 const q = ref('')
 const cat = ref('')
@@ -109,15 +123,26 @@ const st = (r) => (r.enabled ? r.status : 'PAUSED')
 const tagsOf = (r) => (r.tags || '').split(',').map((s) => s.trim()).filter(Boolean)
 const hostName = (id) => hosts.value.find((h) => h.id === id)?.name || `#${id}`
 const groupName = (id) => groups.value.find((g) => g.id === id)?.name || `#${id}`
-// 先套用主機與搜尋，分類按鈕上的數字才會跟著變
-const scoped = computed(() => {
+// 主機、分類兩排按鈕互相連動：各自的數字 = 搜尋 + 另一排目前的篩選
+const isBad = (m) => m.enabled && ['DOWN', 'PENDING'].includes(m.status)
+const searched = computed(() => {
   const kw = q.value.trim().toLowerCase()
-  return list.value.filter((m) => (hostFilter.value == null || hostFilter.value === '' || (m.host_id || 0) === hostFilter.value)
-    && (!kw || [m.name, m.target, m.tags].some((s) => (s || '').toLowerCase().includes(kw))))
+  return list.value.filter((m) => !kw || [m.name, m.target, m.tags].some((s) => (s || '').toLowerCase().includes(kw)))
+})
+const byCat = computed(() => searched.value.filter((m) => !cat.value || categoryOf(m) === cat.value))
+const scoped = computed(() => searched.value.filter((m) => hostFilter.value === null || (m.host_id || 0) === hostFilter.value))
+const osIcon = (os) => ((os || '').toLowerCase().includes('win') ? '⊞' : (os || '').toLowerCase().includes('linux') ? '🐧' : '🖥')
+const hostList = computed(() => {
+  const rows = hosts.value.map((h) => ({ id: h.id, name: h.name, icon: osIcon(h.os) }))
+  if (list.value.some((m) => !m.host_id)) rows.push({ id: 0, name: '未指定主機', icon: '❔' })
+  return rows.map((h) => {
+    const items = byCat.value.filter((m) => (m.host_id || 0) === h.id)
+    return { ...h, n: items.length, down: items.filter(isBad).length }
+  })
 })
 const catList = computed(() => CATEGORIES.map((c) => {
   const items = scoped.value.filter((m) => categoryOf(m) === c.key)
-  return { ...c, n: items.length, down: items.filter((m) => m.enabled && ['DOWN', 'PENDING'].includes(m.status)).length }
+  return { ...c, n: items.length, down: items.filter(isBad).length }
 }).filter((c) => c.n || cat.value === c.key))
 const filtered = computed(() => scoped.value.filter((m) => !cat.value || categoryOf(m) === cat.value))
 
@@ -141,7 +166,12 @@ async function remove(row) {
 
 <style scoped>
 .tools { display: flex; gap: 8px; flex-wrap: wrap; }
-.cats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.filter-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.filter-row:last-of-type { margin-bottom: 14px; }
+.row-label { flex-shrink: 0; width: 34px; padding-top: 8px; font-size: 13px; color: var(--sm-muted); }
+.cats { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat.empty:not(.on) { opacity: .55; }
+.os { font-size: 14px; line-height: 1; }
 .cat {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
   border: 1px solid var(--sm-border); background: var(--sm-card); color: var(--el-text-color-primary);
